@@ -1,0 +1,144 @@
+---
+title: "Chapter 2 - The beta distribution"
+output: html_notebook
+---
+```{r, message=FALSE, echo=FALSE}
+library(dplyr)
+library(ggplot2)
+
+theme_set(theme_minimal())
+```
+
+
+
+We can think of the beta distribution as a **probability distribution of probabilities**.
+
+## 2.1 Batting averages
+
+This book is going to showcase empirical Bayes methods with examples from baseball. While I'm not a baseball fan, the examples should still be illuminating to me (hopefully).
+
+In baseball, a well known statistic is a player's batting average, which is the number of hits over the number of at-bats:
+
+$$\text{ Batting Average } = \frac{H}{AB}$$
+
+#### Some baseball information
+* In general, a batting average of .270 is typical, while .300 is excellent.
+
+#### On "prior expectations"
+One thing that Robinson brings up is that if we want to a predict a player's season-long batting average, using their batting average so far would be a bad way of predicting it. Why? Well, what if a player's first few at-bats all result in hits? Or, what if they all result in misses? This doesn't tell us much since we've only seen a few events.
+
+More importantly, as Robinson points out, we're going into this with **prior expectations** about a player's batting average. Throughout baseball, batting averages over a season range from .210 to .360, (with some outliers on either end of the range). Even if a player does extremely well or poorly at their first few at-bats, their batting average at the end of the season is unlikely to deviate from the range of [.210, .360].
+
+#### Modeling at-bats
+Getting back to predicting a player's batting average, we can model it with a **binomial distribution**, as it models a count of successes over a total number of trials. Our prior can be modeled with a **beta distribution**.
+
+**NOTE:** The domain of the beta distribution is (0, 1) so this is incredibly useful for modeling probabilities!
+
+## 2.2 Updating
+
+Based on what we know, a player's batting average is likely to be around .27, but it could range from .21 to .35. Therefore, we can say that a player's batting average follows a beta distribution with parameters $\alpha$ and $\beta$. Robinson set $\alpha = 81$ and $\beta = 219$ so that the mean and variance are realistic for batting averages.
+```{r}
+sim_batting_averages <- tibble(
+  batting_avg = rbeta(10000000, 81, 219)
+) |> 
+  ggplot(aes(x = batting_avg)) +
+  geom_density(color = "red") +
+  labs(
+    x = "Batting average",
+    y = "Density of beta",
+    title = "Simulation of 10,000,000 batting averages"
+  )
+
+sim_batting_averages
+```
+In the graph above, the x-axis represents the distribution of simulated batting averages, while the y-axis represents the probability density of the beta distribution (i.e. how likely is a given batting average?)
+
+#### Utility of the beta distribution for "updating"
+What's neat about the beta distribution is that it gives us a way to easily model a binomial. When a player makes a hit, we want to move the curve over slightly to the right. In the case that they miss, we want to move it over slightly to the left. 
+
+This is the heart of Bayesian analysis. We have prior information about some quantity of interest, we observe new information, then create a **posterior distribution**, which takes into account our prior and new data.
+
+The result of this "updating" for the beta is: 
+
+$$\text{Beta}(\alpha_0 + \text{hits}, \beta_0 + \text{misses})$$
+
+where:
+* $\alpha_0$ = The prior for $\alpha$.
+* $\beta_0$ = The prior for $\beta$.
+
+```{r}
+sim_multiple_batting_averages <- tibble(
+  prior = rbeta(10000000, 81, 219),
+  one_at_bat = rbeta(10000000, 82, 219),
+  three_hundred_at_bats = rbeta(10000000, 181, 419)
+) |> 
+  ggplot(data = _) +
+  geom_density(aes(x = prior), color = "red") +
+  geom_density(aes(x = one_at_bat), color = "green") +
+  geom_density(aes(x = three_hundred_at_bats), color = "blue")
+
+sim_multiple_batting_averages
+```
+Above, we have three different distributions:
+
+* In red, we have our prior.
+* In green, we have our posterior distribution with a single hit.
+* In blue, we have our posterior distribution with 100 hits at 300 at-bats.
+
+With only one hit, our posterior distribution hardly shifts. However, with 100 hits at 300 at-bats, our posterior distribution **shifts** to the right and gets narrower, reflecting that we are more certain about the player's batting average.
+
+## 2.2.1 Posterior mean 
+The expected mean of a posterior beta distribution is:
+
+$$\frac{\alpha}{\alpha + \beta}$$
+In code:
+```{r}
+calculate_mean_beta <- function(alpha, beta) {
+  alpha / (alpha + beta)
+}
+
+calculate_mean_beta(82 + 100, 219 + 200)
+```
+### 2.3 Conjugate prior
+
+When we say a distribution is a **conjugate prior** of another distribution, we're saying that it's a convenient distribution to use for modeling (**I don't like this sentence so figure out something better later**).
+
+Below, we're going to simulate 10,000,000 players from a $\text{Beta}(81, 219)$ distribution:
+```{r}
+num_trials <- 10e6
+
+simulations <- tibble(
+  true_average = rbeta(num_trials, 81, 219),
+  hits = rbinom(num_trials, 300, true_average)
+)
+
+simulations
+```
+Next, we want to look at how many simulated players got 100/300 hits:
+```{r}
+hit_100 <- simulations |> 
+  filter(hits == 100)
+
+hit_100
+```
+
+```{r}
+hit_100 |>
+  ggplot(data = _) +
+  geom_histogram(aes(x = true_average, y = ..density..)) +
+  geom_density(aes(x = true_average), color = "red")
+```
+
+```{r}
+simulations |> 
+  filter(hits %in% c(60, 80, 100)) |> 
+  ggplot(aes(x = true_average, color = factor(hits))) + 
+  geom_density() +
+  labs(
+    x = "True average of players with H hits / 300 at-bats",
+    color = "H"
+  )
+```
+
+
+
