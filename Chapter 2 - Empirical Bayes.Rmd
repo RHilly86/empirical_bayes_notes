@@ -1,5 +1,0 @@
----
-title: "Chapter 2 - Empirical Bayes"
-output: html_document
----
-
